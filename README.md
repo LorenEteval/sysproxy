@@ -2,25 +2,25 @@
 
 Python bindings for shadowsocks sysproxy utility. This is a Windows-only package.
 
-## API
-
-```pycon
->>> import sysproxy
->>> sysproxy.off() # Turn proxy settings off
-True # Returns True if success. False otherwise
->>> sysproxy.pac('pac_url') # Turn proxy settings on with PAC
-True # Returns True if success. False otherwise
->>> sysproxy.set('127.0.0.1:10809', '127.*;10.*;172.16.*') # Turn proxy settings on with server and bypass
-True # Returns True if success. False otherwise
->>> sysproxy.daemon_off() # Turn proxy daemon off
-True # Returns True if success. False otherwise
->>> sysproxy.daemon_on_() # Turn proxy daemon on. You should launch this function in a Python thread.
-```
-
 ## Install
 
 ```
 pip install sysproxy
+```
+
+## API
+
+```pycon
+>>> import sysproxy
+>>> sysproxy.off() # Turn proxy settings off.
+True
+>>> sysproxy.pac('pac_url') # Turn proxy settings on with PAC.
+True
+>>> sysproxy.set('127.0.0.1:10809', '127.*;10.*;172.16.*') # Turn proxy settings on with server and bypass.
+True
+>>> sysproxy.daemon_off() # Turn proxy daemon off.
+True
+>>> sysproxy.daemon_on_() # Turn proxy daemon on. You should launch this function in a Python thread.
 ```
 
 ## sysproxy daemon
