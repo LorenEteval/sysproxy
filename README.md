@@ -1,5 +1,7 @@
 # sysproxy
 
+[![Build sysproxy binding](https://github.com/LorenEteval/sysproxy/actions/workflows/wheels.yml/badge.svg?branch=main)](https://github.com/LorenEteval/sysproxy/actions/workflows/wheels.yml)
+
 Python bindings for shadowsocks sysproxy utility. This is a Windows-only package.
 
 ## Install
@@ -31,3 +33,14 @@ settings off.
 
 As mentioned above, `sysproxy.daemon_on_()` will block current Python execution, so you should launch it in a Python
 thread.
+
+## Tested Platform
+
+sysproxy works on all reasonable Windows platform with all Python version(Python 3).
+
+Below are tested build in [github actions](https://github.com/LorenEteval/sysproxy/actions).
+
+| Platform     | Python 3.6-Python 3.11 |
+|--------------|:----------------------:|
+| windows-2019 |   :heavy_check_mark:   |
+| windows-2022 |   :heavy_check_mark:   |
