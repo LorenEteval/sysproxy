@@ -1,6 +1,6 @@
 # sysproxy
 
-[![Build sysproxy binding](https://github.com/LorenEteval/sysproxy/actions/workflows/wheels.yml/badge.svg?branch=main)](https://github.com/LorenEteval/sysproxy/actions/workflows/wheels.yml)
+[![Deploy PyPI](https://github.com/LorenEteval/sysproxy/actions/workflows/deploy-pypi.yml/badge.svg?branch=main)](https://github.com/LorenEteval/sysproxy/actions/workflows/deploy-pypi.yml)
 
 Python bindings for shadowsocks sysproxy utility. This is a Windows-only package.
 
