@@ -38,7 +38,9 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: python-package-distributions
-          path: dist/
+          path: |
+            dist/*.tar.gz
+            dist/*.whl
 
   publish-to-pypi:
     name: >-
@@ -102,5 +104,5 @@ jobs:
         # sigstore-produced signatures and certificates.
         run: >-
           gh release upload
-          '${{ github.ref_name }}' dist/*.tar.gz dist/*.whl
+          '${{ github.ref_name }}' dist/**
           --repo '${{ github.repository }}'
