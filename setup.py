@@ -31,8 +31,10 @@ setup(
     author='Loren Eteval',
     author_email='loren.eteval@proton.me',
     url='https://github.com/LorenEteval/sysproxy',
-    setup_requires=['pybind11'],
-    install_requires=['pybind11'],
+    # https://pybind11.readthedocs.io/en/stable/changelog.html#version-2-13-0-june-25-2024
+    # For Python 3.6 support
+    setup_requires=['pybind11 < 2.13.0'],
+    install_requires=['pybind11 < 2.13.0'],
     ext_modules=[
         Extension(
             'sysproxy',
