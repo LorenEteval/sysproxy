@@ -1,6 +1,6 @@
 name: Deploy PyPI
 
-on: [push, pull_request]
+on: [ push, pull_request ]
 
 jobs:
   build:
@@ -8,37 +8,39 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-2019, windows-2022, windows-2025]
-        python-version: ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
-
+        os: [ windows-2022, windows-11-arm ]
+        python-version: [ "3.6", "3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        exclude:
+          - os: windows-11-arm
+            python-version: "3.6"
+          - os: windows-11-arm
+            python-version: "3.7"
+          - os: windows-11-arm
+            python-version: "3.8"
+          - os: windows-11-arm
+            python-version: "3.9"
+          - os: windows-11-arm
+            python-version: "3.10"
     steps:
       - uses: actions/checkout@v3
-
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+          # Support Windows ARM64 build
+          architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
           check-latest: true
-      - run: python --version
-
-      - name: Install setuptools, wheel
-        run: >-
-          python -m
-          pip install
-          setuptools wheel
-
-      - name: Build a binary wheel and a source tarball
-        run: python setup.py sdist bdist_wheel
-
-      - name: Install from source
-        run: python setup.py install
-
-      - name: Run sample.py
-        run: python sample/sample.py
-
+      - name: Install, build & run sample
+        run: |
+          python -c "import sys; print(sys.version)"
+          python -m pip install --upgrade pip
+          python -m pip install setuptools wheel
+          python setup.py sdist bdist_wheel
+          python setup.py install
+          python sample/sample.py
       - name: Store the distribution packages
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: python-package-distributions
+          name: python-package-distributions-${{ matrix.os }}-Python${{ matrix.python-version }}
           path: |
             dist/*.tar.gz
             dist/*.whl
@@ -55,12 +57,12 @@ jobs:
       url: https://pypi.org/p/sysproxy
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
-
     steps:
       - name: Download all the dists
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: python-package-distributions
+          pattern: python-package-distributions-*
+          merge-multiple: true
           path: dist/
       - name: Publish distribution 📦 to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -71,16 +73,15 @@ jobs:
     needs:
       - publish-to-pypi
     runs-on: ubuntu-latest
-
     permissions:
       contents: write  # IMPORTANT: mandatory for making GitHub Releases
       id-token: write  # IMPORTANT: mandatory for sigstore
-
     steps:
       - name: Download all the dists
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: python-package-distributions
+          pattern: python-package-distributions-*
+          merge-multiple: true
           path: dist/
       - name: Create GitHub Release
         env:
