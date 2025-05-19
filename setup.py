@@ -23,7 +23,7 @@ with open('README.md', 'r', encoding='utf-8') as file:
 
 setup(
     name='sysproxy',
-    version='0.1.4',
+    version='0.1.5',
     license='MIT',
     description='Python bindings for shadowsocks sysproxy utility.',
     long_description=long_description,
