@@ -40,7 +40,7 @@ sysproxy works on all reasonable Windows platform with all Python version(Python
 
 Below are tested build in [github actions](https://github.com/LorenEteval/sysproxy/actions).
 
-| Platform     | Python 3.6-Python 3.11 |
+| Platform     | Python 3.6-Python 3.13 |
 |--------------|:----------------------:|
 | windows-2019 |   :heavy_check_mark:   |
 | windows-2022 |   :heavy_check_mark:   |
