@@ -24,7 +24,26 @@ namespace {
 
     std::mutex Mutex;
 
-    atomic_window_t Window;
+    struct DaemonState {
+        atomic_window_t window;
+        std::mutex window_mutex;
+
+        DaemonState() : window(nullptr) {}
+
+        ~DaemonState()
+        {
+            const auto handle = static_cast<HWND>(window.load());
+            if (handle) {
+                PostMessage(handle, WM_CLOSE, 0, 0);
+            }
+        }
+    };
+
+    DaemonState *get_daemon_state(HWND window)
+    {
+        return reinterpret_cast<DaemonState *>(
+            GetWindowLongPtr(window, GWLP_USERDATA));
+    }
 
     bool apply_connect(INTERNET_PER_CONN_OPTION_LIST *option, LPTSTR conn)
     {
@@ -142,16 +161,30 @@ namespace {
     LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         switch (message) {
+        case WM_NCCREATE: {
+            const auto create = reinterpret_cast<CREATESTRUCT *>(lParam);
+            SetWindowLongPtr(
+                hWnd,
+                GWLP_USERDATA,
+                reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+            return DefWindowProc(hWnd, message, wParam, lParam);
+        }
         case WM_CLOSE:
             DestroyWindow(hWnd);
             break;
-        case WM_DESTROY:
+        case WM_DESTROY: {
+            auto state = get_daemon_state(hWnd);
+            if (state) {
+                void *expected = hWnd;
+                state->window.compare_exchange_strong(expected, nullptr);
+            }
             PostQuitMessage(0U);
             break;
+        }
         case WM_QUERYENDSESSION:
             /*
-             * The 'Window' is in an invalid state. But there is no need to reset
-             * it since the system is about to get shutdown
+             * Windows requires a prompt response to this message. Apply the
+             * process-wide proxy cleanup directly; no Python state is touched.
              */
             off();
             return TRUE;
@@ -162,54 +195,109 @@ namespace {
         return 0;
     }
 
-    bool daemon_off()
+    bool daemon_off(DaemonState& state)
     {
-        if (Window.load()) {
-            return static_cast<bool>(PostMessage(static_cast<HWND>(Window.exchange(nullptr)), WM_CLOSE, 0, 0));
+        std::lock_guard<std::mutex> lock(state.window_mutex);
+
+        const auto window = static_cast<HWND>(state.window.load());
+        if (window) {
+            return static_cast<bool>(PostMessage(window, WM_CLOSE, 0, 0));
         }
 
         // no daemon running
         return true;
     }
 
-    bool daemon_on_()
+    bool daemon_on_(DaemonState& state)
     {
-        if (Window.load()) {
-            // daemon already started
-            return true;
+        HWND window = nullptr;
+
+        {
+            std::lock_guard<std::mutex> lock(state.window_mutex);
+
+            if (state.window.load()) {
+                // daemon already started
+                return true;
+            }
+
+            WNDCLASSEX wx{};
+
+            wx.cbSize        = sizeof(wx);
+            wx.lpfnWndProc   = WndProc;
+            wx.lpszClassName = L"sysproxy_class";
+
+            if (!RegisterClassEx(&wx) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+                return false;
+            }
+
+            window = CreateWindowEx(
+                0,
+                wx.lpszClassName,
+                L"sysproxy",
+                0,
+                0,
+                0,
+                0,
+                0,
+                nullptr,
+                nullptr,
+                nullptr,
+                &state);
+
+            if (!window) {
+                return false;
+            }
+
+            state.window.store(window);
         }
 
-        WNDCLASSEX wx{};
-
-        wx.cbSize        = sizeof(wx);
-        wx.lpfnWndProc   = WndProc;
-        wx.lpszClassName = L"sysproxy_class";
-
-        if (!RegisterClassEx(&wx))
-            return false;
-
-        Window = CreateWindowEx(0, wx.lpszClassName, L"sysproxy", 0, 0, 0, 0, 0, nullptr, nullptr, nullptr, nullptr);
-
-        if (Window.load() == nullptr)
-            return false;
-
+        bool success = true;
         {
             py::gil_scoped_release release;
 
             MSG msg{};
+            BOOL result = 0;
 
-            while (GetMessage(&msg, nullptr, 0, 0)) {
+            while ((result = GetMessage(&msg, nullptr, 0, 0)) > 0) {
                 TranslateMessage(&msg);
                 DispatchMessage(&msg);
             }
 
-            py::gil_scoped_acquire acquire;
+            success = result != -1;
         }
 
-        return true;
+        // GetMessage can also end because another component posted WM_QUIT or
+        // because of an error. Do not leave a live HWND pointing at this state.
+        if (IsWindow(window)) {
+            DestroyWindow(window);
+        }
+
+        void *expected = window;
+        state.window.compare_exchange_strong(expected, nullptr);
+
+        return success;
     }
 
+#if PYBIND11_VERSION_HEX >= 0x03000000
+    PYBIND11_MODULE(
+        sysproxy,
+        m,
+        py::mod_gil_not_used(),
+        py::multiple_interpreters::per_interpreter_gil()) {
+#elif PYBIND11_VERSION_HEX >= 0x020D0000
+    PYBIND11_MODULE(sysproxy, m, py::mod_gil_not_used()) {
+#else
     PYBIND11_MODULE(sysproxy, m) {
+#endif
+        auto state = py::capsule(
+            new DaemonState(),
+            "sysproxy.daemon_state",
+            [](void *value) {
+                delete static_cast<DaemonState *>(value);
+            });
+
+        m.attr("_daemon_state") = state;
+
         m.def("off", &off,
             "Turn proxy settings off");
 
@@ -221,10 +309,16 @@ namespace {
             "Turn proxy settings on with server and bypass",
             py::arg("server"), py::arg("bypass"));
 
-        m.def("daemon_off", &daemon_off,
+        m.def("daemon_off", [state]() {
+                return daemon_off(
+                    *static_cast<DaemonState *>(state.get_pointer()));
+            },
             "Turn proxy daemon off");
 
-        m.def("daemon_on_", &daemon_on_,
+        m.def("daemon_on_", [state]() {
+                return daemon_on_(
+                    *static_cast<DaemonState *>(state.get_pointer()));
+            },
             "Turn proxy daemon on");
     }
 }
