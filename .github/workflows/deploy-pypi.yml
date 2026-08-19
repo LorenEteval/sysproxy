@@ -13,7 +13,7 @@ jobs:
     name: Source distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
@@ -39,7 +39,7 @@ jobs:
             arch: ARM64
             builds: "cp{311,312,313,314,314t}-win_arm64"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pypa/cibuildwheel@v4.2.0
         env:
           CIBW_ARCHS_WINDOWS: ${{ matrix.arch }}
@@ -58,7 +58,7 @@ jobs:
       matrix:
         python-version: ["3.6", "3.7", "3.8"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
@@ -94,7 +94,7 @@ jobs:
             arch: ARM64
             python-architecture: arm64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13t"
