@@ -45,6 +45,6 @@ Below are tested build in [github actions](https://github.com/LorenEteval/syspro
 | Windows x64   |    3.6-3.14     |
 | Windows ARM64 |    3.11-3.14    |
 
-Free-threaded Python 3.13 and 3.14 wheels are also built as experimental
-artifacts. Each wheel job runs the daemon lifecycle and interpreter-finalization
-checks in `sample/sample.py` before a tagged release can be published.
+Free-threaded Python 3.13 and 3.14 wheels are also built and tested. Each wheel
+job runs the daemon lifecycle and interpreter-finalization checks in
+`sample/sample.py` before a tagged release can be published.

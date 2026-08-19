@@ -9,101 +9,116 @@ permissions:
   contents: read
 
 jobs:
-  build-wheels:
-    name: ${{ matrix.os }} Python ${{ matrix.python-version }}
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ contains(matrix.python-version, 't') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-2022, windows-11-arm]
-        python-version:
-          - "3.6"
-          - "3.7"
-          - "3.8"
-          - "3.9"
-          - "3.10"
-          - "3.11"
-          - "3.12"
-          - "3.13"
-          - "3.13t"
-          - "3.14"
-          - "3.14t"
-        exclude:
-          # Official Windows ARM64 installers begin at Python 3.11.
-          - os: windows-11-arm
-            python-version: "3.6"
-          - os: windows-11-arm
-            python-version: "3.7"
-          - os: windows-11-arm
-            python-version: "3.8"
-          - os: windows-11-arm
-            python-version: "3.9"
-          - os: windows-11-arm
-            python-version: "3.10"
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-          architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
-          check-latest: true
-
-      - name: Install a Python 3.6-compatible pip
-        if: matrix.python-version == '3.6'
-        run: python -m pip install --upgrade "pip==21.3.1"
-
-      - name: Upgrade pip
-        if: matrix.python-version != '3.6'
-        run: python -m pip install --upgrade pip
-
-      - name: Build wheel
-        run: |
-          python -c "import sys; print(sys.version)"
-          python -m pip wheel . --no-deps --wheel-dir dist
-
-      - name: Install wheel and run lifecycle sample
-        shell: pwsh
-        run: |
-          $wheel = (Get-ChildItem -LiteralPath dist -Filter *.whl).FullName
-          python -m pip install --force-reinstall $wheel
-          python sample/sample.py
-
-      - name: Store wheel
-        uses: actions/upload-artifact@v7
-        with:
-          name: python-package-distributions-${{ matrix.os }}-${{ runner.arch }}-Python${{ matrix.python-version }}
-          path: dist/*.whl
-          if-no-files-found: error
-
-  build-sdist:
+  sdist:
     name: Source distribution
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-
-      - name: Build source distribution
-        run: |
-          python -m pip install --upgrade build
-          python -m build --sdist
-
-      - name: Store source distribution
-        uses: actions/upload-artifact@v7
+      - run: python -m pip install --upgrade build
+      - run: python -m build --sdist
+      - uses: actions/upload-artifact@v7
         with:
-          name: python-package-distributions-sdist
+          name: source-distribution
           path: dist/*.tar.gz
+          if-no-files-found: error
+
+  wheels:
+    name: Wheels (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            arch: AMD64
+            builds: "cp{39,310,311,312,313,314,314t}-win_amd64"
+          - runner: windows-11-arm
+            arch: ARM64
+            builds: "cp{311,312,313,314,314t}-win_arm64"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pypa/cibuildwheel@v4.2.0
+        env:
+          CIBW_ARCHS_WINDOWS: ${{ matrix.arch }}
+          CIBW_BUILD: ${{ matrix.builds }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.arch }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  legacy-wheels:
+    name: Legacy wheel (Python ${{ matrix.python-version }})
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.6", "3.7", "3.8"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+      - name: Build wheel
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade "pip<22; python_version<'3.7'" "pip<25; python_version>='3.7'"
+          python -m pip wheel . --no-deps --wheel-dir wheelhouse
+      - name: Test installed wheel
+        shell: pwsh
+        run: |
+          $wheel = (Get-ChildItem -LiteralPath wheelhouse -Filter *.whl).FullName
+          python -m pip install --force-reinstall $wheel
+          python sample/sample.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheel-Python${{ matrix.python-version }}-AMD64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  python313t-wheels:
+    name: Python 3.13t wheel (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            arch: AMD64
+            python-architecture: x64
+          - runner: windows-11-arm
+            arch: ARM64
+            python-architecture: arm64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13t"
+          architecture: ${{ matrix.python-architecture }}
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip wheel . --no-deps --wheel-dir wheelhouse
+      - name: Test installed wheel
+        shell: pwsh
+        run: |
+          $wheel = (Get-ChildItem -LiteralPath wheelhouse -Filter *.whl).FullName
+          python -m pip install --force-reinstall $wheel
+          python sample/sample.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheel-Python3.13t-${{ matrix.arch }}
+          path: wheelhouse/*.whl
           if-no-files-found: error
 
   publish-to-pypi:
     name: Publish to PyPI
-    if: github.ref_type == 'tag'
-    needs: [build-wheels, build-sdist]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [sdist, wheels, legacy-wheels, python313t-wheels]
     runs-on: ubuntu-latest
     environment:
       name: deploy-pypi
@@ -112,38 +127,32 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - name: Download distributions
-        uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v7
         with:
-          pattern: python-package-distributions-*
+          pattern: "*"
           merge-multiple: true
           path: dist
-
-      - name: Publish distributions
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    name: Create GitHub release
-    if: github.ref_type == 'tag'
+    name: GitHub release
     needs: publish-to-pypi
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download distributions
-        uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v7
         with:
-          pattern: python-package-distributions-*
+          pattern: "*"
           merge-multiple: true
           path: dist
-
       - name: Create release and upload distributions
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create
-          '${{ github.ref_name }}'
+          "${{ github.ref_name }}"
           dist/*
-          --repo '${{ github.repository }}'
-          --verify-tag
+          --repo "${{ github.repository }}"
           --generate-notes
+          --verify-tag
